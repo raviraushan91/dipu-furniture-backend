@@ -21,15 +21,33 @@ const app = express();
 
 config({ path: "./config/config.env" });
 initPassport();
-const allowedOrigins = [process.env.FRONTEND_URL, process.env.DASHBOARD_URL].filter(Boolean);
+
+const normalizeOrigin = (value = "") => String(value).trim().replace(/\/+$/, "");
+const configuredOrigins = [process.env.FRONTEND_URL, process.env.DASHBOARD_URL]
+  .map(normalizeOrigin)
+  .filter(Boolean);
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  const clean = normalizeOrigin(origin);
+
+  if (configuredOrigins.includes(clean)) return true;
+
+  // Allow Vercel preview deployments for user/admin panels.
+  if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(clean)) return true;
+  if (/^https:\/\/[a-z0-9-]+-[a-z0-9-]+\.vercel\.app$/i.test(clean)) return true;
+
+  return false;
+};
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        return callback(null, true);
+      if (isAllowedOrigin(origin)) {
+        return callback(null, origin || true);
       }
-      return callback(new Error("CORS policy does not allow this origin."));
+      // Do not throw server error for CORS mismatch; just reject the origin.
+      return callback(null, false);
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     credentials: true,
